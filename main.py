@@ -69,7 +69,7 @@ async def main():
     if choice == "1":
         selected_drives = available_drives
     elif choice == "2":
-        print(f"📀 ไดร์ฟในเครื่องทั้งหมด: {', '.join(available_drives)}")
+        print(f"\n📀 ไดร์ฟในเครื่องทั้งหมด: {', '.join(available_drives)}")
         drive_input = input(f"ระบุไดร์ฟที่ต้องการ: ").upper()
         selected_drives = [f"{d.strip()}:\\" for d in drive_input.split(",") if f"{d.strip()}:\\" in available_drives]
     
