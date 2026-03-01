@@ -4,13 +4,10 @@ import threading
 import time
 import hashlib
 import os
+import string
 
-# --- 1. งานเช็กไฟล์จริง ---
+# --- เช็กไฟล์จริง ---
 def compute_file_hash(filepath):
-    # """อ่านไฟล์จริง คำนวณ SHA-256 และบอกที่อยู่ไฟล์"""
-    # if not os.path.exists(filepath):
-    #     return f"❌ ไม่พบไฟล์: {filepath}"
-        
     full_location = os.path.abspath(filepath)
     sha256_hash = hashlib.sha256()
     try:
@@ -25,29 +22,60 @@ def compute_file_hash(filepath):
     except Exception as e:
         return f"❌ อ่านไม่ได้: {full_location} ({type(e).__name__})"
 
-# --- 2. ฟังก์ชันช่วยค้นหาไฟล์ในเครื่อง ---
-def find_files_in_system(target, search_path="."):
-    found_paths = []
-    print(f"🔎 กำลังค้นหาคำที่เกี่ยวข้องใน {os.path.abspath(search_path)} ...")
-    
-    for root, dirs, files in os.walk(search_path):
-        if any(x in root for x in ['AppData', '$Recycle.Bin', 'Windows', '.git']):
-            continue
+# --- ฟังก์ชันช่วยค้นหาไดรฟ์ที่มีอยู่ในเครื่อง ---    
+def get_available_drives():
+    drives = []
+    for letter in string.ascii_uppercase:
+        drive = f"{letter}:\\"
+        if os.path.exists(drive):
+            drives.append(drive)
+    return drives
 
-        for filename in files:
-            for targets in target:
-                if targets.lower() in filename.lower():
-                    found_paths.append(os.path.join(root, filename))
+# --- ฟังก์ชันช่วยค้นหาไฟล์ในเครื่อง ---
+def find_files_in_system(target, drive_list):
+    found_paths = []
+    print(f"🔎 เริ่มค้นหาในไดร์ฟ: {', '.join(drive_list)} ...")
+    
+    for drive in drive_list:
+        print(f"📁 กำลังสแกน {drive}...")
+        for root, dirs, files in os.walk(drive):
+            if any(x in root for x in ['AppData', '$Recycle.Bin', 'Windows', '.git']):
+                continue
+
+            for filename in files:
+                for targets in target:
+                    if targets.lower() in filename.lower():
+                        found_paths.append(os.path.join(root, filename))
     return list(set(found_paths))
     
-# --- 3. งานบันทึก Log จริง ---
+# --- บันทึก Log ---
 def logger_to_file(message):
     with open("scan_report.txt", "a", encoding="utf-8") as f:
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{timestamp}] {message}\n")
 
+# --- ฟังก์ชันหลัก ---
 async def main():
-    print("--- Scanner-File (v1.0) ---\n")
+    print("--- Scanner-File (v1.1) ---\n")
+
+    available_drives = get_available_drives()
+    print("เลือกโหมดการสแกน:")
+    print("1. สแกนทุกไดร์ฟที่มี")
+    print("2. เลือกเฉพาะบางไดร์ฟ")
+
+    choice = input("กรุณาเลือก (1 หรือ 2): ").strip()
+    
+    selected_drives = []
+    if choice == "1":
+        selected_drives = available_drives
+    elif choice == "2":
+        print(f"📀 ไดร์ฟในเครื่องทั้งหมด: {', '.join(available_drives)}")
+        drive_input = input(f"ระบุไดร์ฟที่ต้องการ: ").upper()
+        selected_drives = [f"{d.strip()}:\\" for d in drive_input.split(",") if f"{d.strip()}:\\" in available_drives]
+    
+    if not selected_drives:
+        print("⚠️ ไม่ได้เลือกไดร์ฟที่ถูกต้อง จบการทำงาน")
+        return
     
     files = input("ใส่ชื่อไฟล์ในเครื่อง (หรือกด Enter เพื่อข้าม): ").strip()
     if not files: 
@@ -57,7 +85,7 @@ async def main():
     files = [f.strip() for f in files.split(",") if f.strip()]
     start_time = time.perf_counter()
 
-    found_files = find_files_in_system(files, search_path="C:\\")
+    found_files = find_files_in_system(files, selected_drives)
 
     if not found_files:
         print(f"❌ ไม่พบไฟล์ {files} ในโฟลเดอร์นี้และโฟลเดอร์ย่อย")
@@ -65,7 +93,6 @@ async def main():
 
     print(f"✅ เจอไฟล์ทั้งหมด {len(found_files)} ตำแหน่งที่ตรงกับคำค้นหา")
 
-    # ขั้นตอนที่ 2: ส่งไฟล์ที่เจอไปคำนวณ Hash ขนานกัน (Process Pool)
     loop = asyncio.get_running_loop()
     tasks = []
     with concurrent.futures.ProcessPoolExecutor() as pool:
